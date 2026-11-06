@@ -24,11 +24,21 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - name: Check Supabase settings are present
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY || secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
+            echo "::error::VITE_SUPABASE_URL and/or VITE_SUPABASE_ANON_KEY are missing. Add them in Settings → Secrets and variables → Actions (Variables or Secrets tab), then re-run."
+            exit 1
+          fi
+          echo "Supabase URL: $VITE_SUPABASE_URL"
       - run: npm run build
         env:
           # Set these in GitHub → Settings → Secrets and variables → Actions → Variables
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY || secrets.VITE_SUPABASE_ANON_KEY }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
