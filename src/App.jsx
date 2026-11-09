@@ -94,7 +94,7 @@ export default function App() {
   return (
     <MeContext.Provider value={{ ...me, isAdmin, isStaff, isParent }}>
       <header className="topbar">
-        <div className="brand">🏏 Sea Hawks</div>
+        <NavLink to="/" className="brand"><img src={`${import.meta.env.BASE_URL}logo-header.png`} alt="Actionzone Seahawks" /></NavLink>
         <nav>
           {isStaff && <NavLink to="/today">Registers</NavLink>}
           {isAdmin && <NavLink to="/sessions">Sessions</NavLink>}

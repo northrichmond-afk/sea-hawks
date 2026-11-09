@@ -66,7 +66,7 @@ export function Login({ notice }) {
   return (
     <div className="center">
       <div className="card login">
-        <h1>🏏 Sea Hawks Cricket</h1>
+<div className="login-hero"><img src={`${import.meta.env.BASE_URL}logo.png`} alt="Actionzone Seahawks" /></div>
         <p className="muted">Coaching registers, payments and attendance.</p>
 
         {mode !== 'forgot' && (
@@ -155,7 +155,7 @@ export function SetNewPassword({ onDone }) {
   return (
     <div className="center">
       <div className="card login">
-        <h1>🏏 Sea Hawks Cricket</h1>
+<div className="login-hero"><img src={`${import.meta.env.BASE_URL}logo.png`} alt="Actionzone Seahawks" /></div>
         <h2 className="login-title">Choose a new password</h2>
         <form className="form" onSubmit={submit}>
           <label className="field">
