@@ -5,21 +5,23 @@ import { money, fmtDate, fmtTime, STATUS_LABELS, isoDate } from '../../lib/forma
 // Parent view. Security rules mean only their own children come back.
 export default function MyChildren() {
   const { data, error, loading } = useLoad(async () => {
-    const [balances, attendance, payments, upcoming, settings] = await Promise.all([
+    const [balances, attendance, payments, upcoming, settings, charges] = await Promise.all([
       q(supabase.from('player_balances').select('*').order('first_name')),
-      q(supabase.from('attendance').select('player_id, status, sessions(session_date, start_time, fee, cancelled)')
+      q(supabase.from('attendance').select('player_id, status, sessions(session_date, start_time, cancelled)')
         .order('marked_at', { ascending: false }).limit(200)),
       q(supabase.from('payments').select('player_id, amount, paid_on').order('paid_on', { ascending: false })),
       q(supabase.from('sessions').select('id, squad_id, session_date, start_time, end_time, venue, cancelled')
         .gte('session_date', isoDate()).order('session_date').limit(30)),
       q(supabase.from('club_settings').select('*').single()),
+      q(supabase.from('charges').select('player_id, charge_month, amount, description, voided, created_at')
+        .order('charge_month', { ascending: false, nullsFirst: false })),
     ])
-    return { balances, attendance, payments, upcoming, settings }
+    return { balances, attendance, payments, upcoming, settings, charges }
   })
 
   if (loading) return <Loading />
   if (error) return <ErrorBox error={error} />
-  const { balances, attendance, payments, upcoming, settings } = data
+  const { balances, attendance, payments, upcoming, settings, charges } = data
   const total = balances.reduce((t, b) => t + Math.max(0, Number(b.balance)), 0)
 
   return (
@@ -40,6 +42,7 @@ export default function MyChildren() {
         const att = attendance.filter((a) => a.player_id === b.player_id && a.sessions)
           .sort((x, y) => y.sessions.session_date.localeCompare(x.sessions.session_date))
         const pays = payments.filter((p) => p.player_id === b.player_id)
+        const fees = charges.filter((c) => c.player_id === b.player_id)
         const next = upcoming.filter((s) => s.squad_id === b.squad_id).slice(0, 3)
         const attended = att.filter((a) => ['present', 'late'].includes(a.status) && !a.sessions.cancelled).length
         return (
@@ -69,7 +72,16 @@ export default function MyChildren() {
                 <tr key={i}>
                   <td>{fmtDate(a.sessions.session_date)}</td>
                   <td>{a.sessions.cancelled ? 'Cancelled' : STATUS_LABELS[a.status]}</td>
-                  <td className="num">{!a.sessions.cancelled && ['present', 'late'].includes(a.status) ? money(a.sessions.fee) : ''}</td>
+                </tr>
+              ))}</tbody></table>
+            )}
+
+            <h4>Monthly fees</h4>
+            {fees.length === 0 ? <p className="muted">None yet.</p> : (
+              <table><tbody>{fees.slice(0, 12).map((c, i) => (
+                <tr key={i} className={c.voided ? 'cancelled' : ''}>
+                  <td>{c.description || 'Charge'}</td>
+                  <td className="num">{c.voided ? 'Waived' : money(c.amount)}</td>
                 </tr>
               ))}</tbody></table>
             )}

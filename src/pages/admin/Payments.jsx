@@ -72,6 +72,7 @@ export default function Payments() {
   return (
     <div>
       <h1>Payments</h1>
+      <MonthlyCharges onDone={(msg) => { showToast(msg); reload() }} />
       <div className="stats">
         <div className="stat"><span>Total owed</span><b>{money(totalOwed)}</b></div>
         <div className="stat"><span>{view === 'family' ? 'Families' : 'Players'} owing</span>
@@ -206,6 +207,67 @@ function PayForm({ group, onClose, onDone }) {
           <button type="button" onClick={onClose}>Cancel</button>
         </div>
       </form>
+    </div>
+  )
+}
+
+// Monthly fees: once a month the admin raises a charge for every active player.
+function MonthlyCharges({ onDone }) {
+  const [month, setMonth] = useState(isoDate().slice(0, 7)) // yyyy-mm
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+  const first = `${month}-01`
+  const label = new Date(first + 'T00:00:00').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
+
+  const { data, error, loading, reload } = useLoad(async () => {
+    const [players, existing] = await Promise.all([
+      q(supabase.from('players').select('id, fee_override, squads(monthly_fee)').eq('status', 'active').not('squad_id', 'is', null)),
+      q(supabase.from('charges').select('player_id, amount, voided').eq('charge_month', first)),
+    ])
+    const done = new Set(existing.map((c) => c.player_id))
+    const due = players
+      .map((p) => ({ id: p.id, fee: Number(p.fee_override ?? p.squads?.monthly_fee ?? 0) }))
+      .filter((p) => p.fee > 0 && !done.has(p.id))
+    return {
+      raised: existing.filter((c) => !c.voided).length,
+      raisedTotal: existing.filter((c) => !c.voided).reduce((t, c) => t + Number(c.amount), 0),
+      dueCount: due.length,
+      dueTotal: due.reduce((t, p) => t + p.fee, 0),
+    }
+  }, [first])
+
+  async function raise() {
+    if (!confirm(`Charge ${data.dueCount} player${data.dueCount === 1 ? '' : 's'} their ${label} fee (${money(data.dueTotal)} in total)?`)) return
+    setBusy(true); setErr(null)
+    try {
+      const [res] = await q(supabase.rpc('raise_monthly_charges', { p_month: first }))
+      onDone(`${label}: ${res.charges_created} charges raised (${money(res.total)}) ✓`)
+      reload()
+    } catch (e) { setErr(e) } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="card monthly">
+      <div className="row between">
+        <div className="row">
+          <b>Monthly fees</b>
+          <input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} />
+        </div>
+        {loading ? <span className="muted">…</span> : data && (
+          data.dueCount > 0
+            ? <button className="primary" disabled={busy} onClick={raise}>
+                {busy ? 'Raising…' : `Raise ${label} charges (${data.dueCount})`}</button>
+            : <span className="pill green">{data.raised ? `${label} done ✓` : 'Nobody to charge'}</span>
+        )}
+      </div>
+      {data && (
+        <p className="muted small">
+          {data.raised > 0 && <>{data.raised} charged for {label} ({money(data.raisedTotal)}). </>}
+          {data.dueCount > 0 && <>{data.dueCount} active player{data.dueCount === 1 ? '' : 's'} still to charge ({money(data.dueTotal)}). </>}
+          Players who join later can be charged by pressing the button again — nobody is charged twice.
+        </p>
+      )}
+      <ErrorBox error={error || err} />
     </div>
   )
 }

@@ -3,11 +3,21 @@ import { Link } from 'react-router-dom'
 import { supabase, q } from '../../supabase.js'
 import { useLoad, ErrorBox, Loading } from '../../components.jsx'
 import { fullName } from '../../lib/format.js'
+import PlayerHistory from './PlayerHistory.jsx'
+
+const SORTS = {
+  'first-asc': 'First name A–Z',
+  'first-desc': 'First name Z–A',
+  'last-asc': 'Surname A–Z',
+  'last-desc': 'Surname Z–A',
+}
 
 export default function Players() {
   const [search, setSearch] = useState('')
   const [squad, setSquad] = useState('')
   const [status, setStatus] = useState('active')
+  const [sort, setSort] = useState('first-asc')
+  const [history, setHistory] = useState(null)
 
   const { data, error, loading } = useLoad(async () => {
     const [players, squads, links] = await Promise.all([
@@ -28,6 +38,13 @@ export default function Players() {
     (!s || `${fullName(p)} ${p.payment_ref} ${p.guardians.map((g) => g.full_name + ' ' + (g.email || '')).join(' ')}`
       .toLowerCase().includes(s)))
 
+  const [field, dir] = sort.split('-')
+  const other = field === 'first' ? 'last' : 'first'
+  const cmp = (a, b) => (a || '').localeCompare(b || '', 'en-GB', { sensitivity: 'base' })
+  list.sort((a, b) => (cmp(a[`${field}_name`], b[`${field}_name`]) || cmp(a[`${other}_name`], b[`${other}_name`]))
+    * (dir === 'asc' ? 1 : -1))
+  const flipName = () => setSort(`${field}-${dir === 'asc' ? 'desc' : 'asc'}`)
+
   return (
     <div>
       <div className="row between">
@@ -46,25 +63,33 @@ export default function Players() {
           <option value="left">Left</option>
           <option value="">All</option>
         </select>
+        <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort players">
+          {Object.entries(SORTS).map(([k, v]) => <option key={k} value={k}>Sort: {v}</option>)}
+        </select>
       </div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Name</th><th>Squad</th><th>Ref</th><th>Parent / guardian</th></tr></thead>
+          <thead><tr>
+            <th><button className="sort-head" onClick={flipName} title="Change sort order">
+              Name {dir === 'asc' ? '▲' : '▼'}</button></th>
+            <th>Squad</th><th>Ref</th><th>Parent / guardian</th><th></th></tr></thead>
           <tbody>
             {list.map((p) => (
               <tr key={p.id}>
-                <td><Link to={`/players/${p.id}`}>{fullName(p)}</Link></td>
+                <td><Link to={`/players/${p.id}`}>{field === 'last' ? `${p.last_name}, ${p.first_name}` : fullName(p)}</Link></td>
                 <td>{p.squads?.name || <span className="muted">—</span>}</td>
                 <td><code>{p.payment_ref}</code></td>
                 <td>{p.guardians.length
                   ? p.guardians.map((g, i) => <div key={i}>{g.full_name} <span className="muted">{g.phone}</span></div>)
                   : <span className="pill red">No guardian</span>}</td>
+                <td><button onClick={() => setHistory(p)}>History</button></td>
               </tr>
             ))}
-            {list.length === 0 && <tr><td colSpan="4" className="muted">No players found.</td></tr>}
+            {list.length === 0 && <tr><td colSpan="5" className="muted">No players found.</td></tr>}
           </tbody>
         </table>
       </div>
+      {history && <PlayerHistory player={history} onClose={() => setHistory(null)} />}
     </div>
   )
 }

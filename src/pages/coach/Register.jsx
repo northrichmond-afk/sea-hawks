@@ -61,7 +61,7 @@ export default function Register() {
       <Link to="/today" className="muted">← Registers</Link>
       <h1>{session.squads?.name} register</h1>
       <p className="muted">{fmtDate(session.session_date)} · {fmtTime(session.start_time)}–{fmtTime(session.end_time)} · {session.venue}</p>
-      {session.cancelled && <div className="error">This session is cancelled. Nobody will be charged.</div>}
+      {session.cancelled && <div className="error">This session is cancelled.</div>}
       {!alreadyMarked && !session.cancelled && <p className="hint">Everyone starts as Absent. Tap each player who came, or use “All present”.</p>}
 
       <div className="row between sticky">

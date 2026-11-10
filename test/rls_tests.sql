@@ -33,7 +33,7 @@ do $$ begin
   begin insert into payments(player_id, amount) select id, 5 from players limit 1;
         raise exception 'FAIL: coach inserted payment';
   exception when insufficient_privilege then raise notice 'OK coach blocked from payments'; end;
-  begin update sessions set fee = 0;
+  begin update sessions set venue = 'x';
         if found then raise exception 'FAIL coach updated sessions'; end if;
         raise notice 'OK coach cannot update sessions (0 rows)';
   end;
@@ -46,22 +46,15 @@ reset role;
 -- ===== ADMIN =====
 select pg_temp.as_user('admin@example.com'); set role authenticated;
 select 'admin whoami' t, whoami();
-select 'admin charges (expect 3 x 8.00)' t, count(*), sum(amount) from charges where not voided;
--- record payment for Arjun
-insert into payments (player_id, amount, bank_ref) select id, 8, 'SH001 bank' from players where first_name='Arjun';
-select 'admin balances' t, first_name, charged, paid, balance from player_balances where squad_name='U9' order by first_name;
--- change Maya to excused -> charge voided
-update attendance set status='excused' where player_id=(select id from players where first_name='Maya');
-select 'after Maya excused (expect 2 live)' t, count(*) from charges where not voided;
--- change session fee -> charges update
-update sessions set fee = 9 where id=(select id from sessions order by session_date limit 1);
-select 'after fee 9 (expect 18)' t, sum(amount) from charges where not voided;
--- cancel session -> all void
-update sessions set cancelled = true where id=(select id from sessions order by session_date limit 1);
-select 'after cancel (expect 0 live)' t, count(*) from charges where not voided;
-update sessions set cancelled = false where id=(select id from sessions order by session_date limit 1);
-select 'after uncancel (expect 2 live)' t, count(*) from charges where not voided;
-select 'series fn' t, create_session_series((select id from squads where name='U11'), '2026-11-07','2026-12-26','09:00','10:30','Nets',null, array['2026-12-26']::date[]);
+select 'attendance creates no charges (expect 0)' t, count(*) from charges;
+select 'raise Nov (expect 12 rows, 30*3+35*3+35*3+40*3=420)' t, * from raise_monthly_charges('2026-11-15');
+select 'raise Nov again (expect 0, 0)' t, * from raise_monthly_charges('2026-11-01');
+update players set fee_override = 20 where first_name = 'Maya';
+update charges set voided = true where player_id = (select id from players where first_name='Leo') and charge_month = '2026-11-01';
+select 'raise Dec (expect 12, 410)' t, * from raise_monthly_charges('2026-12-01');
+insert into payments (player_id, amount, bank_ref) select id, 30, 'SH001 bank' from players where first_name='Arjun';
+select 'admin balances (Arjun 30, Leo 30, Maya 50)' t, first_name, charged, paid, balance from player_balances where squad_name='U9' order by first_name;
+select 'series fn' t, create_session_series((select id from squads where name='U11'), '2026-11-07','2026-12-26','09:00','10:30','Nets', array['2026-12-26']::date[]);
 select 'report_attendance rows' t, count(*) from report_attendance('2026-01-01','2026-12-31');
 select 'headcounts' t, squad_name, present, late, absent, excused from session_headcounts where marked>0;
 reset role;
@@ -76,6 +69,12 @@ select 'parent sessions (U9 only, expect 8)' t, count(*) from sessions;
 select 'parent attendance (own only, 2)' t, count(*) from attendance;
 select 'parent app_users (expect 0)' t, count(*) from app_users;
 do $$ begin
+  begin perform raise_monthly_charges('2026-11-01');
+        raise exception 'FAIL parent raised charges';
+  exception when raise_exception then
+        if sqlerrm like 'FAIL%' then raise; end if;
+        raise notice 'OK parent cannot raise charges';
+  end;
   begin insert into attendance(session_id, player_id, status)
         select (select id from sessions limit 1), id, 'present' from players limit 1;
         raise exception 'FAIL parent marked attendance';

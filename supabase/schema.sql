@@ -38,7 +38,7 @@ insert into public.club_settings (id) values (true);
 create table public.squads (
   id           uuid primary key default gen_random_uuid(),
   name         text not null unique,
-  default_fee  numeric(8,2) not null default 0 check (default_fee >= 0),
+  monthly_fee  numeric(8,2) not null default 0 check (monthly_fee >= 0),
   active       boolean not null default true,
   created_at   timestamptz not null default now()
 );
@@ -51,6 +51,7 @@ create table public.players (
   last_name    text not null,
   dob          date,
   squad_id     uuid references public.squads(id) on delete set null,
+  fee_override numeric(8,2) check (fee_override >= 0),  -- optional, e.g. sibling discount
   payment_ref  text not null unique
                default ('SH' || lpad(nextval('public.player_ref_seq')::text, 3, '0')),
   status       text not null default 'active' check (status in ('active', 'left')),
@@ -90,7 +91,6 @@ create table public.sessions (
   start_time    time,
   end_time      time,
   venue         text,
-  fee           numeric(8,2) check (fee >= 0),   -- copied from squad if left blank
   cancelled     boolean not null default false,
   series_id     uuid,                            -- groups sessions made together
   notes         text,
@@ -109,17 +109,18 @@ create table public.attendance (
 );
 create index attendance_player_idx on public.attendance (player_id);
 
--- Money owed. Session charges are created automatically from attendance.
--- Admin can also add manual charges/credits (session_id null).
+-- Money owed. One charge per player per month, raised by the admin with
+-- raise_monthly_charges(). Admin can also add manual charges/credits
+-- (charge_month null). A voided charge counts as zero (e.g. fee waived).
 create table public.charges (
-  id           uuid primary key default gen_random_uuid(),
-  player_id    uuid not null references public.players(id) on delete cascade,
-  session_id   uuid references public.sessions(id) on delete cascade,
-  amount       numeric(8,2) not null,
-  description  text,
-  voided       boolean not null default false,
-  created_at   timestamptz not null default now(),
-  unique (session_id, player_id)
+  id            uuid primary key default gen_random_uuid(),
+  player_id     uuid not null references public.players(id) on delete cascade,
+  charge_month  date check (charge_month = date_trunc('month', charge_month)::date),
+  amount        numeric(8,2) not null,
+  description   text,
+  voided        boolean not null default false,
+  created_at    timestamptz not null default now(),
+  unique (player_id, charge_month)
 );
 create index charges_player_idx on public.charges (player_id);
 
@@ -187,90 +188,50 @@ language sql stable security definer set search_path = public as $$
   )
 $$;
 
--- ---------- Triggers: automatic per-session charging ----------------
+-- ---------- Triggers ------------------------------------------------
 
--- Fill a session's fee from its squad if left blank
-create or replace function public.trg_session_default_fee() returns trigger
-language plpgsql security definer set search_path = public as $$
+-- Stamp who marked attendance, and when
+create or replace function public.trg_attendance_stamp() returns trigger
+language plpgsql as $$
 begin
-  if new.fee is null then
-    select default_fee into new.fee from squads where id = new.squad_id;
-  end if;
-  return new;
-end $$;
-
-create trigger session_default_fee
-  before insert or update of squad_id, fee on public.sessions
-  for each row execute function public.trg_session_default_fee();
-
--- Present/late => charge the session fee. Absent/excused => void it.
-create or replace function public.sync_charge(p_session uuid, p_player uuid)
-returns void language plpgsql security definer set search_path = public as $$
-declare
-  s        sessions%rowtype;
-  a_status attendance_status;
-begin
-  select * into s from sessions where id = p_session;
-  select status into a_status from attendance
-   where session_id = p_session and player_id = p_player;
-
-  if s.id is not null and not s.cancelled
-     and a_status in ('present', 'late') and coalesce(s.fee, 0) > 0 then
-    insert into charges (player_id, session_id, amount, description, voided)
-    values (p_player, p_session, s.fee, 'Session ' || to_char(s.session_date, 'DD Mon YYYY'), false)
-    on conflict (session_id, player_id)
-    do update set amount = excluded.amount, voided = false;
-  else
-    update charges set voided = true
-     where session_id = p_session and player_id = p_player and not voided;
-  end if;
-end $$;
-
-create or replace function public.trg_attendance_charge() returns trigger
-language plpgsql security definer set search_path = public as $$
-begin
-  if tg_op = 'DELETE' then
-    perform sync_charge(old.session_id, old.player_id);
-    return old;
-  end if;
   new.marked_by := coalesce(nullif(current_email(), ''), new.marked_by);
   new.marked_at := now();
   return new;
 end $$;
 
-create or replace function public.trg_attendance_charge_after() returns trigger
-language plpgsql security definer set search_path = public as $$
-begin
-  perform sync_charge(new.session_id, new.player_id);
-  return new;
-end $$;
-
 create trigger attendance_stamp
   before insert or update on public.attendance
-  for each row execute function public.trg_attendance_charge();
-create trigger attendance_charge
-  after insert or update on public.attendance
-  for each row execute function public.trg_attendance_charge_after();
-create trigger attendance_charge_delete
-  after delete on public.attendance
-  for each row execute function public.trg_attendance_charge();
+  for each row execute function public.trg_attendance_stamp();
 
--- Cancelling a session or changing its fee updates all its charges
-create or replace function public.trg_session_resync() returns trigger
-language plpgsql security definer set search_path = public as $$
-declare r record;
+-- ---------- Monthly fees ---------------------------------------------
+-- Admin runs this once a month (Payments tab → "Raise charges").
+-- Charges every ACTIVE player in a squad their monthly fee (squad fee,
+-- or the player's own fee if set). Safe to run twice: a player is never
+-- charged twice for the same month, and a waived (voided) month stays waived.
+create or replace function public.raise_monthly_charges(p_month date)
+returns table (charges_created int, total numeric)
+language plpgsql security invoker set search_path = public as $$
+declare
+  m date := date_trunc('month', p_month)::date;
+  n int;
+  t numeric;
 begin
-  if new.cancelled is distinct from old.cancelled or new.fee is distinct from old.fee then
-    for r in select player_id from attendance where session_id = new.id loop
-      perform sync_charge(new.id, r.player_id);
-    end loop;
+  if not is_admin() then
+    raise exception 'Only admins can raise charges';
   end if;
-  return new;
+  with ins as (
+    insert into charges (player_id, charge_month, amount, description)
+    select p.id, m, coalesce(p.fee_override, sq.monthly_fee),
+           'Monthly fee ' || to_char(m, 'FMMonth YYYY')
+    from players p
+    join squads sq on sq.id = p.squad_id
+    where p.status = 'active' and coalesce(p.fee_override, sq.monthly_fee) > 0
+    on conflict (player_id, charge_month) do nothing
+    returning amount
+  )
+  select count(*)::int, coalesce(sum(amount), 0) into n, t from ins;
+  return query select n, t;
 end $$;
-
-create trigger session_resync
-  after update on public.sessions
-  for each row execute function public.trg_session_resync();
 
 -- Stamp who recorded a payment
 create or replace function public.trg_payment_stamp() returns trigger
@@ -289,7 +250,7 @@ create trigger payment_stamp
 create or replace function public.create_session_series(
   p_squad uuid, p_first_date date, p_last_date date,
   p_start time, p_end time, p_venue text,
-  p_fee numeric default null, p_skip date[] default '{}'
+  p_skip date[] default '{}'
 ) returns int
 language plpgsql security invoker set search_path = public as $$
 declare
@@ -305,8 +266,8 @@ begin
   end if;
   while d <= p_last_date loop
     if not (d = any(coalesce(p_skip, '{}'))) then
-      insert into sessions (squad_id, session_date, start_time, end_time, venue, fee, series_id)
-      values (p_squad, d, p_start, p_end, p_venue, p_fee, sid);
+      insert into sessions (squad_id, session_date, start_time, end_time, venue, series_id)
+      values (p_squad, d, p_start, p_end, p_venue, sid);
       n := n + 1;
     end if;
     d := d + 7;
@@ -327,7 +288,7 @@ select p.id as player_id,
        c.oldest_charge
 from players p
 left join squads sq on sq.id = p.squad_id
-left join (select player_id, sum(amount) charged, min(created_at)::date oldest_charge
+left join (select player_id, sum(amount) charged, min(coalesce(charge_month, created_at::date)) oldest_charge
              from charges where not voided group by player_id) c on c.player_id = p.id
 left join (select player_id, sum(amount) paid, max(paid_on) last_paid_on
              from payments group by player_id) pm on pm.player_id = p.id
@@ -335,7 +296,7 @@ where public.is_admin() or p.id in (select public.my_player_ids());
 
 create view public.session_headcounts with (security_invoker = true) as
 select s.id as session_id, s.session_date, s.start_time, s.squad_id,
-       sq.name as squad_name, s.venue, s.cancelled, s.fee,
+       sq.name as squad_name, s.venue, s.cancelled,
        count(a.*) filter (where a.status = 'present') as present,
        count(a.*) filter (where a.status = 'late')    as late,
        count(a.*) filter (where a.status = 'absent')  as absent,

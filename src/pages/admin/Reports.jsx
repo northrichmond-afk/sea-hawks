@@ -106,13 +106,13 @@ const LOADERS = {
   },
   async monthly(from, to) {
     const [charges, payments] = await Promise.all([
-      q(supabase.from('charges').select('amount, created_at, sessions(session_date)').eq('voided', false)),
+      q(supabase.from('charges').select('amount, created_at, charge_month').eq('voided', false)),
       q(supabase.from('payments').select('amount, paid_on').gte('paid_on', from).lte('paid_on', to)),
     ])
     const m = {}
     const row = (k) => (m[k] ||= { month: k, charged: 0, paid: 0 })
     for (const c of charges) {
-      const d = c.sessions?.session_date || c.created_at.slice(0, 10)
+      const d = c.charge_month || c.created_at.slice(0, 10)
       if (d >= from && d <= to) row(d.slice(0, 7)).charged += Number(c.amount)
     }
     for (const p of payments) row(p.paid_on.slice(0, 7)).paid += Number(p.amount)
@@ -158,7 +158,6 @@ const LOADERS = {
         { label: 'Late', key: 'late', num: true },
         { label: 'Absent', key: 'absent', num: true },
         { label: 'Excused', key: 'excused', num: true },
-        { label: 'Fee income', key: (r) => (r.cancelled ? 0 : (r.present + r.late) * Number(r.fee || 0)).toFixed(2), num: true },
       ],
     }
   },

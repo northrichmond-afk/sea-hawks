@@ -16,8 +16,8 @@ update public.club_settings set
   bank_sort_code    = '00-00-00',
   bank_account_no   = '00000000';
 
-insert into public.squads (name, default_fee) values
-  ('U9', 8.00), ('U11', 10.00), ('U13', 10.00), ('U15', 12.00);
+insert into public.squads (name, monthly_fee) values
+  ('U9', 30.00), ('U11', 35.00), ('U13', 35.00), ('U15', 40.00);
 
 -- 12 pretend players across the squads
 insert into public.players (first_name, last_name, dob, squad_id)
@@ -46,4 +46,4 @@ select public.create_session_series(
   (select id from public.squads where name = 'U9'),
   current_date - extract(dow from current_date)::int + 6 - 14,  -- two Saturdays ago
   current_date - extract(dow from current_date)::int + 6 + 35,
-  '10:00', '11:30', 'Main ground', null, '{}');
+  '10:00', '11:30', 'Main ground', '{}');

@@ -3,8 +3,9 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { supabase, q } from '../../supabase.js'
 import { useLoad, ErrorBox, Loading, Field, Toast, useToast } from '../../components.jsx'
 import { money } from '../../lib/format.js'
+import PlayerHistory from './PlayerHistory.jsx'
 
-const EMPTY_PLAYER = { first_name: '', last_name: '', dob: '', squad_id: '', status: 'active', notes: '' }
+const EMPTY_PLAYER = { first_name: '', last_name: '', dob: '', squad_id: '', status: 'active', notes: '', fee_override: '' }
 const EMPTY_GUARDIAN = {
   full_name: '', email: '', phone: '', address_line1: '', address_line2: '', town: '', postcode: '',
   consent: false, relationship: 'Parent',
@@ -17,9 +18,10 @@ export default function PlayerEdit() {
   const [player, setPlayer] = useState(EMPTY_PLAYER)
   const [saveError, setSaveError] = useState(null)
   const [toast, showToast] = useToast()
+  const [history, setHistory] = useState(false)
 
   const { data, error, loading, reload } = useLoad(async () => {
-    const squads = await q(supabase.from('squads').select('id, name').eq('active', true).order('name'))
+    const squads = await q(supabase.from('squads').select('id, name, monthly_fee').eq('active', true).order('name'))
     if (isNew) return { squads, player: null, links: [], balance: null }
     const [player, links, balance] = await Promise.all([
       q(supabase.from('players').select('*').eq('id', id).single()),
@@ -30,7 +32,7 @@ export default function PlayerEdit() {
   }, [id])
 
   useEffect(() => {
-    if (data?.player) setPlayer({ ...EMPTY_PLAYER, ...data.player, dob: data.player.dob || '', notes: data.player.notes || '' })
+    if (data?.player) setPlayer({ ...EMPTY_PLAYER, ...data.player, dob: data.player.dob || '', notes: data.player.notes || '', fee_override: data.player.fee_override ?? '' })
     else if (isNew) setPlayer(EMPTY_PLAYER)
   }, [data, isNew])
 
@@ -46,6 +48,7 @@ export default function PlayerEdit() {
       first_name: player.first_name.trim(), last_name: player.last_name.trim(),
       dob: player.dob || null, squad_id: player.squad_id || null,
       status: player.status, notes: player.notes || null,
+      fee_override: player.fee_override === '' || player.fee_override === null ? null : Number(player.fee_override),
     }
     try {
       if (isNew) {
@@ -67,6 +70,7 @@ export default function PlayerEdit() {
       {!isNew && (
         <p>Payment reference <code>{data.player.payment_ref}</code>
           {data.balance && <> · Balance <b className={data.balance.balance > 0 ? 'owing' : ''}>{money(data.balance.balance)}</b></>}
+          {' '}<button className="link" onClick={() => setHistory(true)}>View history</button>
         </p>
       )}
 
@@ -80,6 +84,10 @@ export default function PlayerEdit() {
               <option value="">— choose —</option>
               {data.squads.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
+          </Field>
+          <Field label="Monthly fee override £"
+            hint={`Leave blank to use the squad fee (${money(data.squads.find((s) => s.id === player.squad_id)?.monthly_fee)})`}>
+            <input type="number" step="0.01" min="0" value={player.fee_override} onChange={up('fee_override')} />
           </Field>
           <Field label="Status">
             <select value={player.status} onChange={up('status')}>
@@ -95,6 +103,7 @@ export default function PlayerEdit() {
         <button className="primary" type="submit">{isNew ? 'Add player' : 'Save player'}</button>
       </form>
 
+      {history && <PlayerHistory player={data.player} onClose={() => { setHistory(false); reload() }} />}
       {!isNew && <Guardians playerId={id} links={data.links} onChange={reload} showToast={showToast} />}
       <Toast msg={toast} />
     </div>

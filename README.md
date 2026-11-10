@@ -21,12 +21,14 @@ Tracks players, guardians and addresses, training sessions, attendance (marked b
 - Any other account sees "No access yet".
 - Email/password accounts get access only **after the person clicks the confirmation link** sent to their inbox. This stops anyone registering with someone else's email address.
 
-## How charging works
-- A coach marks a player **Present** or **Late**, and that session's fee is charged.
-- **Absent** or **Excused** means no charge. Changing a mark later updates the charge.
-- **Cancelling** a session removes its charges. Changing a session's fee updates them.
-- **Balance** = charges − payments.
+## How fees work (monthly)
+- Each squad has a **monthly fee** (Squads tab). A player can have their own amount instead, e.g. a sibling discount (on their player page).
+- Once a month the admin opens **Payments** and presses **Raise [month] charges**. Every active player is charged that month's fee. Pressing it again later only charges players who were added since, so nobody is charged twice.
+- To let a player off a month, open **Players → History → Fees & payments** and press **Waive**.
+- Attendance is recorded for registers and reports only. It doesn't affect fees.
+- **Balance** = fees charged − payments.
 - Parents pay by bank transfer, using their child's reference (e.g. `SH012`). The admin then uses **Payments → Mark paid**. In *By family* view, one transfer for siblings is split across the children automatically.
+- **Players → History** shows each player's attendance and a statement of fees and payments, both exportable to CSV.
 
 ---
 
@@ -102,23 +104,25 @@ npm run dev                  # http://localhost:5173
 ---
 
 ## First steps in the app
-1. Go to **Squads** and add your age groups with a fee per session.
+1. Go to **Squads** and add your age groups with their **monthly fee**.
 2. Go to **Settings** and add the club bank details (shown to parents) and invite coaches by Google email.
 3. Go to **Players** and add players, then each player's parent/guardian (email, phone, address, consent tick). For siblings, use *Link an existing guardian*.
 4. Go to **Sessions → Weekly series** to create the term's training dates, skipping holidays.
 5. Coaches open **Registers**, pick today's session, tap each player's status and **Save**.
-6. When transfers arrive, go to **Payments**, find the family and click **Mark paid**.
+6. At the start of each month, go to **Payments** and press **Raise charges**.
+7. When transfers arrive, go to **Payments**, find the family and click **Mark paid**.
 
 ## Testing-phase notes
 - **Free Supabase projects pause** after about a week with no activity. Restore with one click in the dashboard.
 - The free plan has **no automatic backups**. Export key tables (Table editor → Export CSV), or upgrade to Pro before going live.
 - Use **made-up test data** until you're happy with access rules.
 - Already ran an older `schema.sql` before email/password was added? Also run `supabase/upgrade_002_email_password.sql` once.
+- Set up before monthly fees were added? Run `supabase/upgrade_003_monthly_fees.sql` once, then check the squad fees.
 - **Data protection:** this stores children's data. Record consent (there's a tick box on each guardian), give parents a short privacy notice, and check whether the club needs to pay the ICO data protection fee.
 
 ## Files
 ```
-supabase/schema.sql          tables, charging triggers, report views, security rules
+supabase/schema.sql          tables, monthly charges, report views, security rules
 supabase/seed_test_data.sql  made-up data for testing
 supabase/upgrade_002_*.sql   upgrade for databases set up before email/password sign-in
 src/pages/Login.jsx          sign in (Google or email), create account, forgot/reset password

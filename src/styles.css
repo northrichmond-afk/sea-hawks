@@ -139,3 +139,13 @@ button.google:hover { background: #f7f9fc; }
 .login-hero { background: var(--navy); margin: -14px -14px 14px; padding: 22px 16px 16px; border-radius: 12px 12px 0 0; }
 .login-hero img { width: 210px; max-width: 70%; height: auto; display: block; margin: 0 auto; }
 @media (max-width: 600px) { .brand img { height: 46px; } }
+
+/* Player history + sorting */
+.modal > .card.history { max-width: 760px; }
+.sort-head { background: none; border: none; padding: 0; font: inherit; color: inherit; text-transform: inherit; letter-spacing: inherit; cursor: pointer; }
+.status-present { color: var(--green); font-weight: 600; }
+.status-late { color: var(--amber); font-weight: 600; }
+.status-absent { color: var(--red); }
+.status-excused { color: var(--muted); }
+.card.monthly { border-color: var(--sea); }
+.card.monthly input[type=month] { padding: 6px 8px; }

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase, q } from '../../supabase.js'
 import { useLoad, ErrorBox, Loading, Field, Toast, useToast } from '../../components.jsx'
-import { fmtDate, fmtTime, isoDate, addDays, money } from '../../lib/format.js'
+import { fmtDate, fmtTime, isoDate, addDays } from '../../lib/format.js'
 
 export default function Sessions() {
   const today = isoDate()
@@ -17,14 +17,13 @@ export default function Sessions() {
     const [rows, squads] = await Promise.all([
       q(supabase.from('session_headcounts').select('*').gte('session_date', from).lte('session_date', to)
         .order('session_date').order('start_time')),
-      q(supabase.from('squads').select('id, name, default_fee').eq('active', true).order('name')),
+      q(supabase.from('squads').select('id, name').eq('active', true).order('name')),
     ])
     return { rows, squads }
   }, [from, to])
 
   async function toggleCancel(s) {
-    const msg = s.cancelled ? 'Reinstate this session? Charges for attended players come back.'
-      : 'Cancel this session? Any charges for it will be removed.'
+    const msg = s.cancelled ? 'Reinstate this session?' : 'Cancel this session?'
     if (!confirm(msg)) return
     setErr(null)
     try { await q(supabase.from('sessions').update({ cancelled: !s.cancelled }).eq('id', s.session_id)); reload() }
@@ -35,13 +34,6 @@ export default function Sessions() {
     if (s.marked > 0) { alert('This session has a register. Cancel it instead of deleting.'); return }
     if (!confirm('Delete this session?')) return
     try { await q(supabase.from('sessions').delete().eq('id', s.session_id)); reload() }
-    catch (e) { setErr(e) }
-  }
-
-  async function setFee(s) {
-    const v = prompt(`Fee for this session (£). Attended players' charges will update.`, s.fee)
-    if (v === null || v === '' || isNaN(Number(v))) return
-    try { await q(supabase.from('sessions').update({ fee: Number(v) }).eq('id', s.session_id)); reload() }
     catch (e) { setErr(e) }
   }
 
@@ -74,7 +66,7 @@ export default function Sessions() {
 
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Date</th><th>Time</th><th>Squad</th><th>Venue</th><th>Fee</th><th>Attended</th><th></th></tr></thead>
+          <thead><tr><th>Date</th><th>Time</th><th>Squad</th><th>Venue</th><th>Attended</th><th></th></tr></thead>
           <tbody>
             {rows.map((s) => (
               <tr key={s.session_id} className={s.cancelled ? 'cancelled' : ''}>
@@ -82,7 +74,6 @@ export default function Sessions() {
                 <td>{fmtTime(s.start_time)}</td>
                 <td>{s.squad_name}</td>
                 <td>{s.venue}</td>
-                <td><button className="link" onClick={() => setFee(s)}>{money(s.fee)}</button></td>
                 <td>{s.cancelled ? <span className="pill red">Cancelled</span>
                   : s.marked ? `${s.present + s.late} / ${s.marked}` : <span className="muted">—</span>}</td>
                 <td className="actions">
@@ -92,7 +83,7 @@ export default function Sessions() {
                 </td>
               </tr>
             ))}
-            {rows.length === 0 && <tr><td colSpan="7" className="muted">No sessions in this date range.</td></tr>}
+            {rows.length === 0 && <tr><td colSpan="6" className="muted">No sessions in this date range.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -105,12 +96,11 @@ function SessionForm({ mode, squads, onClose, onDone }) {
   const today = isoDate()
   const [f, setF] = useState({
     squad_id: squads[0]?.id || '', date: today, last_date: addDays(today, 7 * 11),
-    start: '10:00', end: '11:30', venue: '', fee: '', skip: '',
+    start: '10:00', end: '11:30', venue: '', skip: '',
   })
   const [err, setErr] = useState(null)
   const [busy, setBusy] = useState(false)
   const up = (k) => (e) => setF({ ...f, [k]: e.target.value })
-  const squad = squads.find((s) => s.id === f.squad_id)
 
   // Preview of dates for a series
   const dates = []
@@ -123,18 +113,17 @@ function SessionForm({ mode, squads, onClose, onDone }) {
     e.preventDefault()
     setErr(null); setBusy(true)
     try {
-      const fee = f.fee === '' ? null : Number(f.fee)
       if (mode === 'single') {
         await q(supabase.from('sessions').insert({
           squad_id: f.squad_id, session_date: f.date, start_time: f.start || null, end_time: f.end || null,
-          venue: f.venue || null, fee,
+          venue: f.venue || null,
         }))
         onDone(1)
       } else {
         const skip = f.skip.split(/[\s,]+/).filter(Boolean)
         const n = await q(supabase.rpc('create_session_series', {
           p_squad: f.squad_id, p_first_date: f.date, p_last_date: f.last_date,
-          p_start: f.start || null, p_end: f.end || null, p_venue: f.venue || null, p_fee: fee, p_skip: skip,
+          p_start: f.start || null, p_end: f.end || null, p_venue: f.venue || null, p_skip: skip,
         }))
         onDone(n)
       }
@@ -156,9 +145,6 @@ function SessionForm({ mode, squads, onClose, onDone }) {
           {mode === 'series' && <Field label="Last session (or before)"><input type="date" required value={f.last_date} onChange={up('last_date')} /></Field>}
           <Field label="Start"><input type="time" value={f.start} onChange={up('start')} /></Field>
           <Field label="End"><input type="time" value={f.end} onChange={up('end')} /></Field>
-          <Field label="Fee £" hint={`Leave blank to use squad fee (${money(squad?.default_fee)})`}>
-            <input type="number" step="0.01" min="0" value={f.fee} onChange={up('fee')} />
-          </Field>
         </div>
         {mode === 'series' && (
           <>
