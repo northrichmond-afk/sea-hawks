@@ -1,6 +1,6 @@
 # Sea Hawks Cricket — coaching app
 
-Tracks players, guardians and addresses, training sessions, attendance (marked by coaches), per-session fees, payments, and reports.
+Tracks players, guardians and addresses, training sessions, attendance (marked by coaches), monthly fees, payments, and reports.
 
 - **Website:** React (Vite), hosted on GitHub Pages
 - **Database + sign-in:** Supabase. People can sign in with Google, or with email + password (with "forgot password").
