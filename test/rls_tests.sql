@@ -54,6 +54,14 @@ update charges set voided = true where player_id = (select id from players where
 select 'raise Dec (expect 12, 410)' t, * from raise_monthly_charges('2026-12-01');
 insert into payments (player_id, amount, bank_ref) select id, 30, 'SH001 bank' from players where first_name='Arjun';
 select 'admin balances (Arjun 30, Leo 30, Maya 50)' t, first_name, charged, paid, balance from player_balances where squad_name='U9' order by first_name;
+reset role;
+update players set joined_on = '2027-01-10' where first_name = 'Leo';
+select pg_temp.as_user('admin@example.com'); set role authenticated;
+select 'raise Jan 2027 (Leo joins 10 Jan -> 12)' t, * from raise_monthly_charges('2027-01-01');
+update players set joined_on = '2027-02-10' where first_name = 'Leo';
+select 'raise Feb 2027 (Leo joins 10 Feb -> 12)' t, charges_created from raise_monthly_charges('2027-02-01');
+update players set joined_on = '2027-04-01' where first_name = 'Leo';
+select 'raise Mar 2027 (Leo not joined -> 11)' t, charges_created from raise_monthly_charges('2027-03-01');
 select 'series fn' t, create_session_series((select id from squads where name='U11'), '2026-11-07','2026-12-26','09:00','10:30','Nets', array['2026-12-26']::date[]);
 select 'report_attendance rows' t, count(*) from report_attendance('2026-01-01','2026-12-31');
 select 'headcounts' t, squad_name, present, late, absent, excused from session_headcounts where marked>0;

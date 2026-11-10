@@ -28,7 +28,9 @@ Tracks players, guardians and addresses, training sessions, attendance (marked b
 - Attendance is recorded for registers and reports only. It doesn't affect fees.
 - **Balance** = fees charged − payments.
 - Parents pay by bank transfer, using their child's reference (e.g. `SH012`). The admin then uses **Payments → Mark paid**. In *By family* view, one transfer for siblings is split across the children automatically.
-- **Players → History** shows each player's attendance and a statement of fees and payments, both exportable to CSV.
+- Each player has a **joined date**. Monthly charges only start from the month they joined.
+- **Players → History → Monthly fees** shows every month since the player joined as **Paid**, **Part paid**, **Due**, **Waived** or **Not charged**. Payments are applied to the oldest month first. Months with no fee raised can be charged there one at a time, or all together with **Charge all**.
+- **Players → History** also shows attendance and a full statement. Every tab exports to CSV.
 
 ---
 
@@ -118,6 +120,7 @@ npm run dev                  # http://localhost:5173
 - Use **made-up test data** until you're happy with access rules.
 - Already ran an older `schema.sql` before email/password was added? Also run `supabase/upgrade_002_email_password.sql` once.
 - Set up before monthly fees were added? Run `supabase/upgrade_003_monthly_fees.sql` once, then check the squad fees.
+- Set up before joined dates were added? Run `supabase/upgrade_004_joined_date.sql` once. Existing players get a random joined date this year; correct them on each player's page.
 - **Data protection:** this stores children's data. Record consent (there's a tick box on each guardian), give parents a short privacy notice, and check whether the club needs to pay the ICO data protection fee.
 
 ## Files

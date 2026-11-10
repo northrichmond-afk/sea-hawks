@@ -54,6 +54,7 @@ create table public.players (
   fee_override numeric(8,2) check (fee_override >= 0),  -- optional, e.g. sibling discount
   payment_ref  text not null unique
                default ('SH' || lpad(nextval('public.player_ref_seq')::text, 3, '0')),
+  joined_on    date not null default current_date,
   status       text not null default 'active' check (status in ('active', 'left')),
   notes        text,
   created_at   timestamptz not null default now()
@@ -206,7 +207,7 @@ create trigger attendance_stamp
 -- ---------- Monthly fees ---------------------------------------------
 -- Admin runs this once a month (Payments tab → "Raise charges").
 -- Charges every ACTIVE player in a squad their monthly fee (squad fee,
--- or the player's own fee if set). Safe to run twice: a player is never
+-- or the player's own fee if set) who had joined by the end of that month. Safe to run twice: a player is never
 -- charged twice for the same month, and a waived (voided) month stays waived.
 create or replace function public.raise_monthly_charges(p_month date)
 returns table (charges_created int, total numeric)
@@ -226,6 +227,7 @@ begin
     from players p
     join squads sq on sq.id = p.squad_id
     where p.status = 'active' and coalesce(p.fee_override, sq.monthly_fee) > 0
+      and p.joined_on < (m + interval '1 month')::date
     on conflict (player_id, charge_month) do nothing
     returning amount
   )

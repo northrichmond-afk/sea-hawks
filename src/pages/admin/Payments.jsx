@@ -221,11 +221,14 @@ function MonthlyCharges({ onDone }) {
 
   const { data, error, loading, reload } = useLoad(async () => {
     const [players, existing] = await Promise.all([
-      q(supabase.from('players').select('id, fee_override, squads(monthly_fee)').eq('status', 'active').not('squad_id', 'is', null)),
+      q(supabase.from('players').select('id, joined_on, fee_override, squads(monthly_fee)').eq('status', 'active').not('squad_id', 'is', null)),
       q(supabase.from('charges').select('player_id, amount, voided').eq('charge_month', first)),
     ])
     const done = new Set(existing.map((c) => c.player_id))
+    const nextFirst = month.slice(5) === '12' ? `${Number(month.slice(0, 4)) + 1}-01-01`
+      : `${month.slice(0, 5)}${String(Number(month.slice(5)) + 1).padStart(2, '0')}-01`
     const due = players
+      .filter((p) => !p.joined_on || p.joined_on < nextFirst)
       .map((p) => ({ id: p.id, fee: Number(p.fee_override ?? p.squads?.monthly_fee ?? 0) }))
       .filter((p) => p.fee > 0 && !done.has(p.id))
     return {
@@ -264,7 +267,7 @@ function MonthlyCharges({ onDone }) {
         <p className="muted small">
           {data.raised > 0 && <>{data.raised} charged for {label} ({money(data.raisedTotal)}). </>}
           {data.dueCount > 0 && <>{data.dueCount} active player{data.dueCount === 1 ? '' : 's'} still to charge ({money(data.dueTotal)}). </>}
-          Players who join later can be charged by pressing the button again — nobody is charged twice.
+          Only players who had joined by the end of the month are charged. Press again after adding players — nobody is charged twice.
         </p>
       )}
       <ErrorBox error={error || err} />

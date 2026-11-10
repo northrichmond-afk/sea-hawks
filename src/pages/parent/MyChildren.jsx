@@ -1,12 +1,14 @@
 import { supabase, q } from '../../supabase.js'
 import { useLoad, ErrorBox, Loading } from '../../components.jsx'
 import { money, fmtDate, fmtTime, STATUS_LABELS, isoDate } from '../../lib/format.js'
+import { monthlyStatement, monthLabel, STATUS_TEXT } from '../../lib/months.js'
 
 // Parent view. Security rules mean only their own children come back.
 export default function MyChildren() {
   const { data, error, loading } = useLoad(async () => {
-    const [balances, attendance, payments, upcoming, settings, charges] = await Promise.all([
+    const [balances, joined, attendance, payments, upcoming, settings, charges] = await Promise.all([
       q(supabase.from('player_balances').select('*').order('first_name')),
+      q(supabase.from('players').select('id, joined_on')),
       q(supabase.from('attendance').select('player_id, status, sessions(session_date, start_time, cancelled)')
         .order('marked_at', { ascending: false }).limit(200)),
       q(supabase.from('payments').select('player_id, amount, paid_on').order('paid_on', { ascending: false })),
@@ -16,12 +18,12 @@ export default function MyChildren() {
       q(supabase.from('charges').select('player_id, charge_month, amount, description, voided, created_at')
         .order('charge_month', { ascending: false, nullsFirst: false })),
     ])
-    return { balances, attendance, payments, upcoming, settings, charges }
+    return { balances, joined: Object.fromEntries(joined.map((p) => [p.id, p.joined_on])), attendance, payments, upcoming, settings, charges }
   })
 
   if (loading) return <Loading />
   if (error) return <ErrorBox error={error} />
-  const { balances, attendance, payments, upcoming, settings, charges } = data
+  const { balances, joined, attendance, payments, upcoming, settings, charges } = data
   const total = balances.reduce((t, b) => t + Math.max(0, Number(b.balance)), 0)
 
   return (
@@ -42,7 +44,8 @@ export default function MyChildren() {
         const att = attendance.filter((a) => a.player_id === b.player_id && a.sessions)
           .sort((x, y) => y.sessions.session_date.localeCompare(x.sessions.session_date))
         const pays = payments.filter((p) => p.player_id === b.player_id)
-        const fees = charges.filter((c) => c.player_id === b.player_id)
+        const months = monthlyStatement({ joinedOn: joined[b.player_id], charges: charges.filter((c) => c.player_id === b.player_id), payments: pays })
+          .rows.filter((r) => r.status !== 'not-charged')
         const next = upcoming.filter((s) => s.squad_id === b.squad_id).slice(0, 3)
         const attended = att.filter((a) => ['present', 'late'].includes(a.status) && !a.sessions.cancelled).length
         return (
@@ -77,11 +80,12 @@ export default function MyChildren() {
             )}
 
             <h4>Monthly fees</h4>
-            {fees.length === 0 ? <p className="muted">None yet.</p> : (
-              <table><tbody>{fees.slice(0, 12).map((c, i) => (
-                <tr key={i} className={c.voided ? 'cancelled' : ''}>
-                  <td>{c.description || 'Charge'}</td>
-                  <td className="num">{c.voided ? 'Waived' : money(c.amount)}</td>
+            {months.length === 0 ? <p className="muted">None yet.</p> : (
+              <table><tbody>{months.slice(0, 12).map((r) => (
+                <tr key={r.month} className={r.status === 'waived' ? 'cancelled' : ''}>
+                  <td>{monthLabel(r.month)}</td>
+                  <td className="num">{money(r.amount)}</td>
+                  <td><span className={`mstatus m-${r.status}`}>{STATUS_TEXT[r.status]}</span></td>
                 </tr>
               ))}</tbody></table>
             )}

@@ -149,3 +149,13 @@ button.google:hover { background: #f7f9fc; }
 .status-excused { color: var(--muted); }
 .card.monthly { border-color: var(--sea); }
 .card.monthly input[type=month] { padding: 6px 8px; }
+
+/* Monthly paid/due badges */
+.mstatus { display: inline-block; font-size: .8rem; font-weight: 600; padding: 2px 9px; border-radius: 99px; }
+.m-paid { background: #e3f4ea; color: var(--green); }
+.m-due { background: #fdecea; color: var(--red); }
+.m-part { background: #fff3dc; color: var(--amber); }
+.m-waived { background: #eceff3; color: var(--muted); }
+.m-not-charged { background: transparent; color: var(--muted); font-weight: 400; padding-left: 0; }
+.nomargin { margin: 0; }
+.stat small { font-size: .8rem; font-weight: 500; }

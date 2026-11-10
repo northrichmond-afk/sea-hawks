@@ -41,6 +41,11 @@ select p.id, g.id, 'Parent'
 from public.players p, public.guardians g
 where g.email = 'parent@example.com' and p.last_name = 'Test';
 
+-- Random joined dates between 1 Jan this year and today
+update public.players
+   set joined_on = date_trunc('year', current_date)::date
+                   + floor(random() * (current_date - date_trunc('year', current_date)::date + 1))::int;
+
 -- Weekly Saturday sessions for U9 for the next 8 weeks
 select public.create_session_series(
   (select id from public.squads where name = 'U9'),

@@ -5,7 +5,7 @@ import { useLoad, ErrorBox, Loading, Field, Toast, useToast } from '../../compon
 import { money } from '../../lib/format.js'
 import PlayerHistory from './PlayerHistory.jsx'
 
-const EMPTY_PLAYER = { first_name: '', last_name: '', dob: '', squad_id: '', status: 'active', notes: '', fee_override: '' }
+const EMPTY_PLAYER = { first_name: '', last_name: '', dob: '', joined_on: new Date().toISOString().slice(0, 10), squad_id: '', status: 'active', notes: '', fee_override: '' }
 const EMPTY_GUARDIAN = {
   full_name: '', email: '', phone: '', address_line1: '', address_line2: '', town: '', postcode: '',
   consent: false, relationship: 'Parent',
@@ -47,6 +47,7 @@ export default function PlayerEdit() {
     const row = {
       first_name: player.first_name.trim(), last_name: player.last_name.trim(),
       dob: player.dob || null, squad_id: player.squad_id || null,
+      joined_on: player.joined_on || undefined,
       status: player.status, notes: player.notes || null,
       fee_override: player.fee_override === '' || player.fee_override === null ? null : Number(player.fee_override),
     }
@@ -79,6 +80,9 @@ export default function PlayerEdit() {
           <Field label="First name"><input required value={player.first_name} onChange={up('first_name')} /></Field>
           <Field label="Last name"><input required value={player.last_name} onChange={up('last_name')} /></Field>
           <Field label="Date of birth"><input type="date" value={player.dob} onChange={up('dob')} /></Field>
+          <Field label="Joined the club" hint="Monthly fees start from this month.">
+            <input type="date" required value={player.joined_on || ''} onChange={up('joined_on')} />
+          </Field>
           <Field label="Squad">
             <select value={player.squad_id || ''} onChange={up('squad_id')}>
               <option value="">— choose —</option>

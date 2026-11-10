@@ -77,7 +77,8 @@ export default function Players() {
             {list.map((p) => (
               <tr key={p.id}>
                 <td><Link to={`/players/${p.id}`}>{field === 'last' ? `${p.last_name}, ${p.first_name}` : fullName(p)}</Link></td>
-                <td>{p.squads?.name || <span className="muted">—</span>}</td>
+                <td>{p.squads?.name || <span className="muted">—</span>}
+                  {p.joined_on && <div className="muted small">Joined {new Date(p.joined_on + 'T00:00:00').toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}</div>}</td>
                 <td><code>{p.payment_ref}</code></td>
                 <td>{p.guardians.length
                   ? p.guardians.map((g, i) => <div key={i}>{g.full_name} <span className="muted">{g.phone}</span></div>)
